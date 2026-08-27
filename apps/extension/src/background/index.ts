@@ -6,6 +6,7 @@ import { validatePlan } from '../shared/validator';
 
 const sessions = new Map<number, SessionState>();
 const adapter = new FixtureCommandAdapter();
+let pageTabId: number | null = null;
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -176,6 +177,7 @@ async function handlePanelMessage(message: ExtensionMessage, tabId: number): Pro
 listen((message, sender) => {
   if (message.type === 'open_panel') {
     const tabId = sender.tab?.id;
+    if (typeof tabId === 'number') pageTabId = tabId;
     if (typeof tabId === 'number') {
       chrome.sidePanel.open({ tabId }).catch(() => {
         void chrome.action.setBadgeText({ text: '1', tabId });
@@ -186,6 +188,7 @@ listen((message, sender) => {
   }
   if (message.type === 'schema_result' && sender.tab?.id !== undefined) {
     const tabId = sender.tab.id;
+    pageTabId = tabId;
     const session = sessions.get(tabId);
     if (session) {
       const updated = reduce(session, { kind: 'schema_refreshed', schema: message.schema });
@@ -194,7 +197,8 @@ listen((message, sender) => {
     }
     return;
   }
-  void activeTabId().then((tabId) => {
+  const routedTabId: number | null = pageTabId;
+  void (routedTabId ?? (await activeTabId())).then((tabId) => {
     if (tabId !== null) void handlePanelMessage(message, tabId);
   });
 });

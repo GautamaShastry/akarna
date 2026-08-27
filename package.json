@@ -4,10 +4,11 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "build": "pnpm --filter @akarna/extension build",
-    "typecheck": "pnpm --filter @akarna/extension typecheck",
-    "lint": "pnpm --filter @akarna/extension lint",
-    "test": "pnpm --filter @akarna/extension test"
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r --filter=!@akarna/e2e test",
+    "e2e": "pnpm --filter @akarna/e2e test"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.280",
