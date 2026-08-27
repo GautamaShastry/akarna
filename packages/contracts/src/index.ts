@@ -72,6 +72,12 @@ export const ExecutionResultSchema = z.object({
 }).strict();
 export type ExecutionResult = z.infer<typeof ExecutionResultSchema>;
 
+export const ClarificationSchema = z.object({
+  prompt: z.string().min(1),
+  candidates: z.array(z.string().min(1)).optional(),
+}).strict();
+export type Clarification = z.infer<typeof ClarificationSchema>;
+
 export const SessionPhaseSchema = z.enum([
   'idle', 'form_detected', 'form_selected', 'awaiting_answer',
   'clarifying', 'executing', 'verifying', 'reviewing_section',
@@ -79,16 +85,22 @@ export const SessionPhaseSchema = z.enum([
 ]);
 export type SessionPhase = z.infer<typeof SessionPhaseSchema>;
 
-export const SessionMetadataSchema = z.object({
+export const SessionStateSchema = z.object({
   sessionId: z.string().min(1),
   formId: z.string().min(1),
   pageUrl: z.string().url(),
-  schemaFingerprint: z.string().min(1),
   phase: SessionPhaseSchema,
-  currentGroup: z.string().optional(),
-  unresolvedFieldIds: z.array(z.string().min(1)),
+  scanVersion: z.number().int().positive(),
+  fingerprint: z.string().min(1),
+  completedFieldIds: z.array(z.string().min(1)),
+  skippedOptionalFieldIds: z.array(z.string().min(1)),
+  unresolvedRequiredFieldIds: z.array(z.string().min(1)),
+  nextFieldId: z.string().min(1).optional(),
+  currentSectionId: z.string().min(1).optional(),
+  pendingSubmitConfirmation: z.boolean(),
+  schema: FormSchema,
 }).strict();
-export type SessionMetadata = z.infer<typeof SessionMetadataSchema>;
+export type SessionState = z.infer<typeof SessionStateSchema>;
 
 export const ProtocolEnvelopeSchema = z.object({
   protocolVersion: z.literal(1),
@@ -96,6 +108,7 @@ export const ProtocolEnvelopeSchema = z.object({
 }).strict();
 
 export const ExtensionMessageSchema = z.discriminatedUnion('type', [
+  ProtocolEnvelopeSchema.extend({ type: z.literal('open_panel'), formId: z.string().min(1).optional() }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('start_session') }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('request_schema') }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('schema_result'), schema: FormSchema }),
@@ -103,6 +116,12 @@ export const ExtensionMessageSchema = z.discriminatedUnion('type', [
   ProtocolEnvelopeSchema.extend({ type: z.literal('action_plan'), plan: ActionPlanSchema }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('execute'), formId: z.string().min(1), scanVersion: z.number().int().positive(), plan: ActionPlanSchema }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('execution_result'), result: ExecutionResultSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('session_state'), session: SessionStateSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('clarification'), clarification: ClarificationSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('submit_request') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('submit_confirmation') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('next_section') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('review_ack') }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('cancel_session') }),
 ]);
 export type ExtensionMessage = z.infer<typeof ExtensionMessageSchema>;
