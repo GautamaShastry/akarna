@@ -1,3 +1,9 @@
+import { discoverForms } from './scanner';
+
+const eligibleForms = discoverForms();
+if (eligibleForms.length === 0) {
+  // The scanner owns eligibility; do not show a start affordance on unrelated pages.
+} else {
 const chip = document.createElement('button');
 chip.type = 'button';
 chip.textContent = 'Start Akarna';
@@ -21,3 +27,4 @@ chip.addEventListener('click', () => {
 });
 
 document.documentElement.append(chip);
+}
