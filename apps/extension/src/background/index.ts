@@ -66,6 +66,13 @@ async function handlePanelMessage(message: ExtensionMessage, tabId: number): Pro
     }
     case 'command': {
       if (!session) return;
+      const normalized = message.command.trim().toLowerCase();
+      if (normalized === 'continue' || normalized === 'next' || normalized === 'review') {
+        session = reduce(session, { kind: 'reviewing_section' });
+        sessions.set(tabId, session);
+        publishState(session);
+        return;
+      }
       session = reduce(session, { kind: 'awaiting_answer' });
       const { plan, clarification } = adapter.parse(message.command, session.schema);
       if (clarification) {
@@ -110,6 +117,13 @@ async function handlePanelMessage(message: ExtensionMessage, tabId: number): Pro
       if (!session) return;
       if (unresolvedRequired(session).length > 0) {
         sendMessage({ protocolVersion: 1, sessionId: session.sessionId, type: 'clarification', clarification: { prompt: 'Required fields are unresolved. Review them before submitting.' } });
+        publishState(session);
+        return;
+      }
+      if (session.phase !== 'reviewing_section') {
+        session = reduce(session, { kind: 'reviewing_section' });
+        sessions.set(tabId, session);
+        sendMessage({ protocolVersion: 1, sessionId: session.sessionId, type: 'clarification', clarification: { prompt: 'Review the section summary below. When everything looks right, request submission again.' } });
         publishState(session);
         return;
       }

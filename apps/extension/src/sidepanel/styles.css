@@ -46,6 +46,7 @@ h1 { margin: 2px 0 4px; font-size: 20px; }
 
 .review fieldset { border: 1px solid #dbe3f0; border-radius: 8px; }
 .review ul { margin: 6px 0; padding-left: 18px; font-size: 12px; }
+.review-actions { display: flex; gap: 8px; margin-top: 8px; }
 
 .confirm {
   padding: 10px;

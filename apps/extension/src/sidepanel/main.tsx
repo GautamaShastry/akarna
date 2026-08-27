@@ -116,7 +116,13 @@ function Panel(): ReactElement {
       </section>
 
       {session && session.phase === 'reviewing_section' && (
-        <section aria-label="Review">{sectionSummary(session)}</section>
+        <section aria-label="Review">
+          {sectionSummary(session)}
+          <div className="review-actions">
+            <button type="button" onClick={() => sendMessage({ protocolVersion: 1, sessionId: session.sessionId, type: 'next_section' })}>Continue</button>
+            <button type="button" onClick={() => sendMessage({ protocolVersion: 1, sessionId: session.sessionId, type: 'submit_request' })}>Request submission</button>
+          </div>
+        </section>
       )}
 
       {session?.pendingSubmitConfirmation && (
