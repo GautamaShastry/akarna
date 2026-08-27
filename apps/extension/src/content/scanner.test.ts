@@ -25,7 +25,7 @@ describe('form scanner', () => {
   it('scans supported controls and groups radios', () => {
     const form = fixture();
     const schema = scanForm(form, 'https://fixture.test');
-    expect(schema.fields.map((field) => field.kind)).toEqual(['text', 'select', 'radio_group']);
+    expect(schema.fields.map((field) => field.kind)).toEqual(['text', 'select', 'radio_group', 'text']);
     expect(schema.fields[0]?.label).toBe('Full name');
     expect(schema.fields[1]?.options).toEqual([{ value: 'masters', label: "Master's" }]);
     expect(schema.fields[2]?.options).toHaveLength(2);

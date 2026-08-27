@@ -122,13 +122,19 @@ function groupControls(controls: SupportedControl[]): SupportedControl[][] {
   for (const control of controls) {
     if (control instanceof HTMLInputElement && control.type === 'radio') {
       const group = radioGroups.get(control.name);
-      if (group) group.push(control);
-      else radioGroups.set(control.name, [control]);
+      if (group) {
+        group.push(control);
+      } else {
+        // Anchor the group at the position of its first radio to keep DOM order.
+        const started: SupportedControl[] = [control];
+        radioGroups.set(control.name, started);
+        groups.push(started);
+      }
     } else {
       groups.push([control]);
     }
   }
-  return [...groups, ...radioGroups.values()];
+  return groups;
 }
 
 function fingerprintOf(fields: ContractField[]): string {

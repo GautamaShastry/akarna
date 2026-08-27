@@ -120,7 +120,11 @@ export function executeAction(schema: Form, action: Action, form: HTMLFormElemen
     }
   }
 
-  const observed = primary instanceof HTMLInputElement && primary.type === 'checkbox' ? primary.checked : primary.value;
+  const observed = primary instanceof HTMLInputElement && primary.type === 'checkbox'
+    ? primary.checked
+    : field.kind === 'radio_group'
+      ? (entry.elements.find((element): element is HTMLInputElement => element instanceof HTMLInputElement && element.checked)?.value ?? '')
+      : primary.value;
   if (expected.value !== undefined && observed !== expected.value) {
     return { result: fail(`The website did not accept the value for "${field.label}".`, 'verification_failed', rescanForm(form)), completedFieldIds: [] };
   }

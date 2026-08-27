@@ -23,7 +23,7 @@ const TRANSITIONS: Record<SessionPhase, ReadonlySet<SessionEvent['kind']>> = {
   awaiting_answer: new Set<SessionEvent['kind']>(['clarifying', 'executing', 'verifying', 'schema_refreshed', 'reviewing_section', 'submit_requested', 'cancelled']),
   clarifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'executing', 'schema_refreshed', 'cancelled']),
   executing: new Set<SessionEvent['kind']>(['verifying', 'execution_done', 'awaiting_answer', 'clarifying', 'schema_refreshed', 'cancelled']),
-  verifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'execution_done', 'schema_refreshed', 'reviewing_section', 'submit_requested', 'cancelled']),
+  verifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'execution_done', 'schema_refreshed', 'reviewing_section', 'submit_requested', 'submit_result', 'cancelled']),
   reviewing_section: new Set<SessionEvent['kind']>(['awaiting_answer', 'next_section', 'schema_refreshed', 'submit_requested', 'cancelled']),
   awaiting_submit_confirmation: new Set<SessionEvent['kind']>(['submit_confirmed', 'schema_refreshed', 'reviewing_section', 'cancelled']),
   submitted: new Set<SessionEvent['kind']>([]),
