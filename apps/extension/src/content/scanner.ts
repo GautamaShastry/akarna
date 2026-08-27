@@ -1,16 +1,24 @@
-import { FieldSchema, FormSchema, type FieldKind, type Form } from '@akarna/contracts';
+import { FieldSchema, FormSchema, type FieldKind, type FieldSchema as ContractField, type Form } from '@akarna/contracts';
 
 type SupportedControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-type RegistryEntry = { elements: SupportedControl[]; field: FieldSchema };
+type RegistryEntry = { elements: SupportedControl[]; field: ContractField };
+type ScanState = { formId: string; scanVersion: number; fingerprint: string };
 
 const SUPPORTED_INPUT_TYPES = new Set(['text', 'email', 'tel', 'number', 'date', 'checkbox', 'radio']);
 const SENSITIVE_PATTERN = /password|card|credit|cvv|ssn|social security|government|medical|health|diagnos|insurance/i;
+
 const registry = new Map<string, RegistryEntry>();
+const formIds = new WeakMap<HTMLFormElement, string>();
+const scanStates = new WeakMap<HTMLFormElement, ScanState>();
 let nextFormNumber = 1;
 let nextFieldNumber = 1;
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+export function normalizeOptionText(value: string): string {
+  return value.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function isVisible(element: HTMLElement): boolean {
@@ -30,8 +38,7 @@ function labelText(control: SupportedControl): string {
   if (labelledBy) return normalizeText(labelledBy.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' '));
   const ariaLabel = control.getAttribute('aria-label');
   if (ariaLabel) return normalizeText(ariaLabel);
-  const fieldset = control.closest('fieldset');
-  const legend = fieldset?.querySelector('legend');
+  const legend = control.closest('fieldset')?.querySelector('legend');
   if (legend) return normalizeText(legend.textContent ?? '');
   const placeholder = control.getAttribute('placeholder');
   if (placeholder) return normalizeText(placeholder);
@@ -47,7 +54,7 @@ function fieldKind(control: SupportedControl): FieldKind | null {
   return null;
 }
 
-function sensitive(control: SupportedControl, label: string): boolean {
+function isSensitive(control: SupportedControl, label: string): boolean {
   return control.dataset.sensitive === 'true' || SENSITIVE_PATTERN.test(`${label} ${control.name} ${control.autocomplete}`);
 }
 
@@ -60,58 +67,132 @@ function controlsFor(form: HTMLFormElement): SupportedControl[] {
 
 function sectionId(control: SupportedControl): string {
   const section = control.closest('fieldset, section, [data-section]');
-  return section?.getAttribute('data-section') ?? normalizeText(section?.querySelector('legend')?.textContent ?? 'section') || 'section';
+  return section?.getAttribute('data-section') ?? normalizeText(section?.querySelector('legend')?.textContent ?? '') || 'section';
 }
 
-function makeField(control: SupportedControl, elements: SupportedControl[], fieldId: string): FieldSchema {
+function makeField(control: SupportedControl, elements: SupportedControl[], fieldId: string): ContractField {
   const kind = fieldKind(control);
   if (!kind) throw new Error('Unsupported control');
   const label = labelText(control);
   const options = control instanceof HTMLSelectElement
     ? Array.from(control.options).filter((option) => !option.disabled && option.value).map((option) => ({ value: option.value, label: normalizeText(option.textContent ?? option.label) }))
     : kind === 'radio_group'
-      ? elements.map((radio) => ({ value: radio instanceof HTMLInputElement ? radio.value : '', label: labelText(radio) })).filter((option) => option.value)
+      ? elements.map((radio) => ({ value: radio.value, label: labelText(radio) })).filter((option) => option.value)
       : undefined;
   const currentValue = kind === 'checkbox'
-    ? (control as HTMLInputElement).checked
+    ? control.checked
     : kind === 'radio_group'
-      ? (elements.find((radio) => radio instanceof HTMLInputElement && radio.checked) as HTMLInputElement | undefined)?.value ?? ''
+      ? elements.find((radio) => radio.checked)?.value ?? ''
       : control.value;
   return FieldSchema.parse({
-    fieldId, kind, label, required: control.required || elements.some((element) => element.required), disabled: control.disabled || elements.every((element) => element.disabled), visible: isVisible(control), sensitive: sensitive(control, label), currentValue, options,
-    constraints: control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement ? { min: control.min || undefined, max: control.max || undefined, pattern: control.pattern || undefined, inputMode: control.inputMode || undefined } : undefined,
+    fieldId,
+    kind,
+    label,
+    required: control.required || elements.some((element) => element.required),
+    disabled: control.disabled || elements.every((element) => element.disabled),
+    visible: isVisible(control),
+    sensitive: isSensitive(control, label),
+    currentValue,
+    options,
+    constraints: control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement
+      ? { min: control.min || undefined, max: control.max || undefined, pattern: control.pattern || undefined, inputMode: control.inputMode || undefined }
+      : undefined,
     sectionId: sectionId(control),
   });
 }
 
-export function scanForm(form: HTMLFormElement, pageUrl = window.location.href, formId = `form-${nextFormNumber++}`, scanVersion = 1): Form {
-  registry.clear();
-  const controls = controlsFor(form);
-  const groups = new Map<string, SupportedControl[]>();
+function groupControls(controls: SupportedControl[]): SupportedControl[][] {
+  const groups: SupportedControl[][] = [];
+  const radioGroups = new Map<string, SupportedControl[]>();
   for (const control of controls) {
-    const key = control instanceof HTMLInputElement && control.type === 'radio' ? `radio:${control.name}` : `control:${nextFieldNumber++}`;
-    const group = groups.get(key) ?? [];
-    group.push(control);
-    groups.set(key, group);
+    if (control instanceof HTMLInputElement && control.type === 'radio') {
+      const group = radioGroups.get(control.name);
+      if (group) group.push(control);
+      else radioGroups.set(control.name, [control]);
+    } else {
+      groups.push([control]);
+    }
   }
-  const fields = Array.from(groups.values()).map((elements) => {
+  return [...groups, ...radioGroups.values()];
+}
+
+function fingerprintOf(fields: ContractField[]): string {
+  return JSON.stringify(fields.map((field) => [field.kind, field.label, field.required, field.disabled, field.visible, field.sensitive, field.sectionId, field.options]));
+}
+
+function scanInto(form: HTMLFormElement, pageUrl: string): Form {
+  const existing = scanStates.get(form);
+  const formId = existing?.formId ?? `form-${nextFormNumber++}`;
+  const controls = controlsFor(form);
+  const fields = groupControls(controls).map((elements) => {
     const first = elements[0];
     if (!first) throw new Error('Empty control group');
-    const fieldId = `field-${nextFieldNumber++}`;
-    const field = makeField(first, elements, fieldId);
-    registry.set(fieldId, { elements, field });
-    return field;
+    return makeField(first, elements, `field-${nextFieldNumber++}`);
   });
+  const fingerprint = fingerprintOf(fields);
+  const scanVersion = existing && existing.fingerprint === fingerprint ? existing.scanVersion : (existing?.scanVersion ?? 0) + 1;
+  registry.clear();
+  groupControls(controls).forEach((elements, index) => {
+    const field = fields[index];
+    if (field) registry.set(field.fieldId, { elements, field });
+  });
+  scanStates.set(form, { formId, scanVersion, fingerprint });
   return FormSchema.parse({ formId, scanVersion, pageUrl, fields });
 }
 
-export function getRegistryEntry(fieldId: string): RegistryEntry | undefined { return registry.get(fieldId); }
-export function clearRegistry(): void { registry.clear(); }
+export function scanForm(form: HTMLFormElement, pageUrl = window.location.href): Form {
+  return scanInto(form, pageUrl);
+}
+
+export function rescanForm(form: HTMLFormElement, pageUrl = window.location.href): Form {
+  return scanInto(form, pageUrl);
+}
+
+export function getScanState(form: HTMLFormElement): ScanState | undefined {
+  return scanStates.get(form);
+}
+
+export function getRegistryEntry(fieldId: string, formId: string, scanVersion: number): RegistryEntry | undefined {
+  const entry = registry.get(fieldId);
+  if (!entry) return undefined;
+  const state = scanStates.get(entry.elements[0]?.closest('form') as HTMLFormElement | null ?? null as unknown as HTMLFormElement);
+  if (!state || state.formId !== formId || state.scanVersion !== scanVersion) return undefined;
+  return entry;
+}
+
+export function clearRegistry(): void {
+  registry.clear();
+}
 
 export function discoverForms(root: ParentNode = document): HTMLFormElement[] {
   return Array.from(root.querySelectorAll('form')).filter((form) => controlsFor(form).length > 0);
 }
 
 export function selectFormFromTarget(target: EventTarget | null): HTMLFormElement | null {
-  return target instanceof Element ? target.closest('form') : null;
+  if (!(target instanceof Element)) return null;
+  const form = target.closest('form');
+  if (!form) return null;
+  return controlsFor(form).length > 0 ? form : null;
+}
+
+const watchers = new WeakMap<HTMLFormElement, MutationObserver>();
+
+export function watchForm(form: HTMLFormElement, onChange: (schema: Form) => void, pageUrl = window.location.href): void {
+  watchers.get(form)?.disconnect();
+  let scheduled: number | undefined;
+  const observer = new MutationObserver(() => {
+    window.clearTimeout(scheduled);
+    scheduled = window.setTimeout(() => {
+      const before = scanStates.get(form);
+      const schema = rescanForm(form, pageUrl);
+      if (!before || before.scanVersion !== schema.scanVersion) onChange(schema);
+    }, 100);
+  });
+  observer.observe(form, { attributes: true, attributeFilter: ['disabled', 'required', 'hidden', 'style', 'class', 'aria-hidden', 'value', 'min', 'max'], childList: true, subtree: true });
+  watchers.set(form, observer);
+}
+
+export function unwatchForm(form: HTMLFormElement): void {
+  watchers.get(form)?.disconnect();
+  watchers.delete(form);
 }
