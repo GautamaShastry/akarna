@@ -5,8 +5,12 @@ type TextControl = HTMLInputElement | HTMLTextAreaElement;
 
 function isVisible(element: HTMLElement): boolean {
   if (element.hidden || element.getAttribute('aria-hidden') === 'true') return false;
+  const checkable = element as HTMLElement & { checkVisibility?: (options?: { checkVisibilityCSS?: boolean }) => boolean };
+  if (typeof checkable.checkVisibility === 'function') {
+    return checkable.checkVisibility({ checkVisibilityCSS: true });
+  }
   const style = window.getComputedStyle(element);
-  return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+  return style.display !== 'none' && style.visibility !== 'hidden';
 }
 
 function fail(message: string, errorCode: string, schema: Form): ExecutionResult {

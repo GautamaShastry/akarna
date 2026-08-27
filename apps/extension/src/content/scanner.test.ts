@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 function fixture(): HTMLFormElement {
-  document.body.innerHTML = `<form id="application"><fieldset><legend>Education</legend><label for="name">Full name</label><input id="name" name="name" required><label for="degree">Degree</label><select id="degree" name="degree"><option value="">Choose</option><option value="masters">Master's</option></select><label><input type="radio" name="authorization" value="yes"> Authorized</label><label><input type="radio" name="authorization" value="no"> Sponsorship</label><input id="hidden" type="text" hidden><input id="disabled" type="text" disabled></fieldset></form>`;
+  document.body.innerHTML = `<form id="application"><fieldset><legend>Education</legend><label for="name">Full name</label><input id="name" name="name" required><label for="degree">Degree</label><select id="degree" name="degree"><option value="">Choose</option><option value="masters">Master's</option></select><label><input type="radio" name="authorization" value="yes"> Authorized</label><label><input type="radio" name="authorization" value="no"> Sponsorship</label><input id="hidden" type="text" hidden><input id="disabled" type="text" disabled aria-label="Office use"></fieldset></form>`;
   const form = document.getElementById('application');
   if (!(form instanceof HTMLFormElement)) throw new Error('Fixture form missing');
   return form;
@@ -32,10 +32,11 @@ describe('form scanner', () => {
     expect(schema.fields[0]?.sectionId).toBe('Education');
   });
 
-  it('keeps hidden and disabled controls out of the schema', () => {
+  it('excludes hidden controls and flags disabled ones for the validator', () => {
     const schema = scanForm(fixture(), 'https://fixture.test');
     expect(schema.fields.some((field) => field.label.includes('hidden'))).toBe(false);
-    expect(schema.fields.some((field) => field.label.includes('disabled'))).toBe(false);
+    const officeUse = schema.fields.find((field) => field.label === 'Office use');
+    expect(officeUse?.disabled).toBe(true);
   });
 
   it('keeps formId stable and does not bump scanVersion without structural change', () => {
@@ -46,7 +47,7 @@ describe('form scanner', () => {
     expect(second.scanVersion).toBe(first.scanVersion);
   });
 
-  it('bumps scanVersion and emits a fresh schema when structure changes', () => {
+  it('bumps scanVersion and emits a fresh schema when structure changes', async () => {
     vi.useFakeTimers();
     const form = fixture();
     const first = scanForm(form, 'https://fixture.test');
@@ -56,24 +57,33 @@ describe('form scanner', () => {
     conditional.id = 'extra';
     conditional.type = 'text';
     form.querySelector('fieldset')?.append(conditional);
-    vi.advanceTimersByTime(200);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(200);
     expect(onChange).toHaveBeenCalledTimes(1);
     const updated = onChange.mock.calls[0]?.[0];
     expect(updated?.scanVersion).toBe(first.scanVersion + 1);
-    expect(updated?.fields.some((field) => field.fieldId.endsWith('extra') || field.label.includes('extra') || field.fieldId !== first.fields[0]?.fieldId)).toBe(true);
+    expect(updated?.fields.length).toBe(first.fields.length + 1);
   });
 
-  it('rejects registry lookups for a stale scan version', () => {
+  it('keeps field IDs stable within a scan version and rejects them after a version bump', () => {
     const form = fixture();
     const first = scanForm(form, 'https://fixture.test');
     const fieldId = first.fields[0]?.fieldId ?? '';
     expect(getRegistryEntry(fieldId, first.formId, first.scanVersion)).toBeDefined();
-    rescanForm(form, 'https://fixture.test');
-    const second = scanForm(form, 'https://fixture.test');
-    void second;
+
+    const rescanned = rescanForm(form, 'https://fixture.test');
+    expect(rescanned.scanVersion).toBe(first.scanVersion);
+    expect(rescanned.fields[0]?.fieldId).toBe(fieldId);
     expect(getRegistryEntry(fieldId, first.formId, first.scanVersion)).toBeDefined();
-    const rescan = rescanForm(form, 'https://fixture.test');
-    expect(getRegistryEntry(fieldId, first.formId, first.scanVersion)).toBeDefined();
-    expect(getRegistryEntry(fieldId, first.formId, rescan.scanVersion)).toBeDefined();
+
+    const extra = document.createElement('input');
+    extra.id = 'added';
+    extra.type = 'text';
+    form.querySelector('fieldset')?.append(extra);
+    const bumped = rescanForm(form, 'https://fixture.test');
+    expect(bumped.scanVersion).toBe(first.scanVersion + 1);
+    expect(getRegistryEntry(fieldId, first.formId, first.scanVersion)).toBeUndefined();
+    const newId = bumped.fields[0]?.fieldId ?? '';
+    expect(getRegistryEntry(newId, first.formId, bumped.scanVersion)).toBeDefined();
   });
 });

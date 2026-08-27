@@ -18,14 +18,14 @@ export type SessionEvent =
 
 const TRANSITIONS: Record<SessionPhase, ReadonlySet<SessionEvent['kind']>> = {
   idle: new Set<SessionEvent['kind']>(['form_selected', 'cancelled']),
-  form_detected: new Set<SessionEvent['kind']>(['form_selected', 'cancelled']),
-  form_selected: new Set<SessionEvent['kind']>(['awaiting_answer', 'clarifying', 'executing', 'reviewing_section', 'cancelled']),
-  awaiting_answer: new Set<SessionEvent['kind']>(['clarifying', 'executing', 'verifying', 'reviewing_section', 'submit_requested', 'cancelled']),
-  clarifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'executing', 'cancelled']),
-  executing: new Set<SessionEvent['kind']>(['verifying', 'awaiting_answer', 'clarifying', 'cancelled']),
-  verifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'reviewing_section', 'submit_requested', 'cancelled']),
-  reviewing_section: new Set<SessionEvent['kind']>(['awaiting_answer', 'next_section', 'submit_requested', 'cancelled']),
-  awaiting_submit_confirmation: new Set<SessionEvent['kind']>(['submit_confirmed', 'reviewing_section', 'cancelled']),
+  form_detected: new Set<SessionEvent['kind']>(['form_selected', 'schema_refreshed', 'cancelled']),
+  form_selected: new Set<SessionEvent['kind']>(['awaiting_answer', 'clarifying', 'executing', 'schema_refreshed', 'reviewing_section', 'cancelled']),
+  awaiting_answer: new Set<SessionEvent['kind']>(['clarifying', 'executing', 'verifying', 'schema_refreshed', 'reviewing_section', 'submit_requested', 'cancelled']),
+  clarifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'executing', 'schema_refreshed', 'cancelled']),
+  executing: new Set<SessionEvent['kind']>(['verifying', 'execution_done', 'awaiting_answer', 'clarifying', 'schema_refreshed', 'cancelled']),
+  verifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'execution_done', 'schema_refreshed', 'reviewing_section', 'submit_requested', 'cancelled']),
+  reviewing_section: new Set<SessionEvent['kind']>(['awaiting_answer', 'next_section', 'schema_refreshed', 'submit_requested', 'cancelled']),
+  awaiting_submit_confirmation: new Set<SessionEvent['kind']>(['submit_confirmed', 'schema_refreshed', 'reviewing_section', 'cancelled']),
   submitted: new Set<SessionEvent['kind']>([]),
   cancelled: new Set<SessionEvent['kind']>([]),
 };
@@ -56,7 +56,8 @@ export function createSession(sessionId: string, schema: Form): SessionState {
     pendingSubmitConfirmation: false,
     schema,
   };
-  return { ...base, unresolvedRequiredFieldIds: unresolvedRequired(base) };
+  const unresolved = unresolvedRequired(base);
+  return { ...base, unresolvedRequiredFieldIds: unresolved, nextFieldId: unresolved[0] };
 }
 
 export class TransitionError extends Error {

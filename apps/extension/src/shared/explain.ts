@@ -33,7 +33,7 @@ export function explainField(field: FieldSchema, session: SessionState): string 
 }
 
 export function nextPrompt(session: SessionState): string | null {
-  const nextId = session.nextFieldId;
+  const nextId = session.nextFieldId ?? session.unresolvedRequiredFieldIds[0];
   if (!nextId) {
     const optional = session.schema.fields.find((field) => !field.required && !session.completedFieldIds.includes(field.fieldId) && !session.skippedOptionalFieldIds.includes(field.fieldId) && field.visible && !field.disabled && !field.sensitive);
     return optional ? `All required fields are answered. Optional: "${optional.label}" — say "skip ${optional.label}" to ignore it.` : 'All required fields are answered. Review the summary, then submit when ready.';

@@ -2,7 +2,7 @@ import { FieldSchema, FormSchema, type FieldKind, type FieldSchema as ContractFi
 
 type SupportedControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 type RegistryEntry = { elements: SupportedControl[]; field: ContractField };
-type ScanState = { formId: string; scanVersion: number; fingerprint: string };
+type ScanState = { formId: string; scanVersion: number; fingerprint: string; fieldIds: string[] };
 
 const SUPPORTED_INPUT_TYPES = new Set(['text', 'email', 'tel', 'number', 'date', 'checkbox', 'radio']);
 const SENSITIVE_PATTERN = /password|card|credit|cvv|ssn|social security|government|medical|health|diagnos|insurance/i;
@@ -23,8 +23,13 @@ export function normalizeOptionText(value: string): string {
 
 function isVisible(element: HTMLElement): boolean {
   if (element.hidden || element.getAttribute('aria-hidden') === 'true') return false;
+  const checkable = element as HTMLElement & { checkVisibility?: (options?: { checkVisibilityCSS?: boolean }) => boolean };
+  if (typeof checkable.checkVisibility === 'function') {
+    return checkable.checkVisibility({ checkVisibilityCSS: true });
+  }
+  // jsdom and other layout-less environments: rely on style information only.
   const style = window.getComputedStyle(element);
-  return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+  return style.display !== 'none' && style.visibility !== 'hidden';
 }
 
 function labelText(control: SupportedControl): string {
@@ -133,20 +138,24 @@ function fingerprintOf(fields: ContractField[]): string {
 function scanInto(form: HTMLFormElement, pageUrl: string): Form {
   const existing = scanStates.get(form);
   const formId = existing?.formId ?? `form-${nextFormNumber++}`;
-  const controls = controlsFor(form);
-  const fields = groupControls(controls).map((elements) => {
+  const groups = groupControls(controlsFor(form));
+  const structural = groups.map((elements) => {
     const first = elements[0];
     if (!first) throw new Error('Empty control group');
-    return makeField(first, elements, `field-${nextFieldNumber++}`);
+    return makeField(first, elements, 'pending');
   });
-  const fingerprint = fingerprintOf(fields);
-  const scanVersion = existing && existing.fingerprint === fingerprint ? existing.scanVersion : (existing?.scanVersion ?? 0) + 1;
-  registry.clear();
-  groupControls(controls).forEach((elements, index) => {
-    const field = fields[index];
-    if (field) registry.set(field.fieldId, { elements, field });
+  const fingerprint = fingerprintOf(structural);
+  const unchanged = existing !== undefined && existing.fingerprint === fingerprint;
+  const scanVersion = unchanged ? existing.scanVersion : (existing?.scanVersion ?? 0) + 1;
+  const fields = structural.map((field, index) => {
+    // IDs must stay stable for the lifetime of one scan version.
+    const fieldId = (unchanged ? existing?.fieldIds[index] : undefined) ?? `field-${nextFieldNumber++}`;
+    const elements = groups[index] ?? [];
+    const resolved = FieldSchema.parse({ ...field, fieldId });
+    registry.set(fieldId, { elements, field: resolved });
+    return resolved;
   });
-  scanStates.set(form, { formId, scanVersion, fingerprint });
+  scanStates.set(form, { formId, scanVersion, fingerprint, fieldIds: fields.map((field) => field.fieldId) });
   return FormSchema.parse({ formId, scanVersion, pageUrl, fields });
 }
 
@@ -165,7 +174,8 @@ export function getScanState(form: HTMLFormElement): ScanState | undefined {
 export function getRegistryEntry(fieldId: string, formId: string, scanVersion: number): RegistryEntry | undefined {
   const entry = registry.get(fieldId);
   if (!entry) return undefined;
-  const state = scanStates.get(entry.elements[0]?.closest('form') as HTMLFormElement | null ?? null as unknown as HTMLFormElement);
+  const formEl = entry.elements[0]?.closest('form');
+  const state = formEl !== null && formEl !== undefined ? scanStates.get(formEl) : undefined;
   if (!state || state.formId !== formId || state.scanVersion !== scanVersion) return undefined;
   return entry;
 }
