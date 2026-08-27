@@ -9,7 +9,7 @@ export default defineConfig({
       input: {
         background: resolve(process.cwd(), 'src/background/index.ts'),
         content: resolve(process.cwd(), 'src/content/index.ts'),
-        sidepanel: resolve(process.cwd(), 'src/sidepanel/index.html'),
+        sidepanel: resolve(process.cwd(), 'sidepanel.html'),
       },
       output: {
         entryFileNames: '[name].js',

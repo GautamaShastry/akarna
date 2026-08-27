@@ -1,18 +1,26 @@
-import { discoverForms, selectFormFromTarget, watchForm, unwatchForm } from './scanner';
+import { ExtensionMessageSchema, type Form } from '@akarna/contracts';
+import { discoverForms, rescanForm, scanForm, selectFormFromTarget, unwatchForm, watchForm } from './scanner';
+import { executePlan } from './executor';
 
 let selectedForm: HTMLFormElement | null = null;
 
-function isEligibleForm(form: HTMLFormElement): boolean {
-  return discoverForms().includes(form);
+function currentForm(): HTMLFormElement | null {
+  if (selectedForm) return selectedForm;
+  const [first] = discoverForms();
+  return first ?? null;
+}
+
+function currentSchema(): Form | null {
+  const form = currentForm();
+  return form ? scanForm(form) : null;
 }
 
 function sendOpenPanel(formId?: string): void {
-  void chrome.runtime.sendMessage({ protocolVersion: 1, sessionId: `tab-${Date.now()}`, type: 'open_panel', formId });
+  void chrome.runtime.sendMessage({ protocolVersion: 1, sessionId: `page-${Date.now()}`, type: 'open_panel', formId });
 }
 
-function ensureChip(): HTMLButtonElement | undefined {
-  const existing = document.getElementById('akarna-start-chip');
-  if (existing instanceof HTMLButtonElement) return existing;
+function ensureChip(): void {
+  if (document.getElementById('akarna-start-chip')) return;
   const chip = document.createElement('button');
   chip.id = 'akarna-start-chip';
   chip.type = 'button';
@@ -32,15 +40,9 @@ function ensureChip(): HTMLButtonElement | undefined {
     cursor: 'pointer',
   });
   chip.addEventListener('click', () => {
-    if (selectedForm) {
-      const schema = import('./scanner').then(({ scanForm }) => scanForm(selectedForm as HTMLFormElement));
-      void schema.then((form) => sendOpenPanel(form.formId));
-    } else {
-      sendOpenPanel();
-    }
+    sendOpenPanel(currentSchema()?.formId);
   });
   document.documentElement.append(chip);
-  return chip;
 }
 
 function removeChip(): void {
@@ -48,10 +50,9 @@ function removeChip(): void {
 }
 
 function refreshChip(): void {
-  const eligible = discoverForms();
-  if (eligible.length > 0) ensureChip();
+  if (discoverForms().length > 0) ensureChip();
   else removeChip();
-  if (selectedForm && !isEligibleForm(selectedForm)) selectedForm = null;
+  if (selectedForm && !discoverForms().includes(selectedForm)) selectedForm = null;
 }
 
 function selectForm(target: EventTarget | null): void {
@@ -63,10 +64,63 @@ document.addEventListener('focusin', (event) => selectForm(event.target), true);
 document.addEventListener('click', (event) => selectForm(event.target), true);
 
 for (const form of discoverForms()) {
-  watchForm(form, () => refreshChip());
+  watchForm(form, (schema) => {
+    refreshChip();
+    void chrome.runtime.sendMessage({ protocolVersion: 1, sessionId: 'page', type: 'schema_result', schema });
+  });
 }
 
 refreshChip();
+
+chrome.runtime.onMessage.addListener((raw: unknown, _sender, sendResponse): boolean => {
+  const parsed = ExtensionMessageSchema.safeParse(raw);
+  if (!parsed.success) {
+    sendResponse({ ok: false, error: 'unknown_message' });
+    return false;
+  }
+  const message = parsed.data;
+
+  if (message.type === 'request_schema') {
+    const schema = currentSchema();
+    sendResponse(schema
+      ? { protocolVersion: 1, sessionId: 'page', type: 'schema_result', schema }
+      : { protocolVersion: 1, sessionId: 'page', type: 'clarification', clarification: { prompt: 'No supported form found on this page.' } });
+    return false;
+  }
+
+  if (message.type === 'execute') {
+    const form = currentForm();
+    const schema = currentSchema();
+    if (!form || !schema) {
+      sendResponse({ protocolVersion: 1, sessionId: 'page', type: 'execution_result', result: { success: false, errorCode: 'no_form', message: 'No selected form.', nextSchema: schema ?? { formId: 'none', scanVersion: 1, pageUrl: location.href, fields: [] } } });
+      return false;
+    }
+    const result = executePlan(schema, message.plan, form);
+    sendResponse({ protocolVersion: 1, sessionId: 'page', type: 'execution_result', result });
+    return false;
+  }
+
+  if (message.type === 'submit_confirmation') {
+    const form = currentForm();
+    const schema = currentSchema();
+    const freshSchema = form ? rescanForm(form) : null;
+    if (!form || !schema || !freshSchema || freshSchema.formId !== message.formId) {
+      sendResponse({ protocolVersion: 1, sessionId: 'page', type: 'execution_result', result: { success: false, errorCode: 'form_changed', message: 'The form changed; submission was cancelled.', nextSchema: freshSchema ?? schema ?? { formId: 'none', scanVersion: 1, pageUrl: location.href, fields: [] } } });
+      return false;
+    }
+    const invalid = form.querySelector<HTMLElement>(':invalid');
+    const validationMessage = invalid instanceof HTMLInputElement || invalid instanceof HTMLTextAreaElement || invalid instanceof HTMLSelectElement ? invalid.validationMessage : '';
+    if (!form.checkValidity()) {
+      sendResponse({ protocolVersion: 1, sessionId: 'page', type: 'execution_result', result: { success: false, errorCode: 'native_validation', message: 'The website reports unresolved validation errors.', nativeValidationMessage: validationMessage || undefined, nextSchema: freshSchema } });
+      return false;
+    }
+    form.requestSubmit();
+    sendResponse({ protocolVersion: 1, sessionId: 'page', type: 'execution_result', result: { success: true, message: 'Submission performed.', nextSchema: freshSchema } });
+    return false;
+  }
+
+  return false;
+});
 
 window.addEventListener('pagehide', () => {
   for (const form of discoverForms()) unwatchForm(form);

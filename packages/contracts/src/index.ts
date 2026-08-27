@@ -119,7 +119,7 @@ export const ExtensionMessageSchema = z.discriminatedUnion('type', [
   ProtocolEnvelopeSchema.extend({ type: z.literal('session_state'), session: SessionStateSchema }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('clarification'), clarification: ClarificationSchema }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('submit_request') }),
-  ProtocolEnvelopeSchema.extend({ type: z.literal('submit_confirmation') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('submit_confirmation'), formId: z.string().min(1).optional(), scanVersion: z.number().int().positive().optional() }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('next_section') }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('review_ack') }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('cancel_session') }),
