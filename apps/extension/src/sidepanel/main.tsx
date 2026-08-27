@@ -65,8 +65,9 @@ function Panel(): ReactElement {
         setTranscript((entries) => [...entries, { role: message.result.success ? 'system' : 'error', text: explainResult(message.result) }]);
         if (message.result.success && message.result.message.startsWith('Read ') && message.result.observedValue !== undefined) {
           const field = message.result.nextSchema.fields.find((candidate) => String(candidate.currentValue ?? '') === String(message.result.observedValue));
-          if (field && sessionRef.current) {
-            setTranscript((entries) => [...entries, { role: 'system', text: explainField(field, sessionRef.current) }]);
+          const current = sessionRef.current;
+          if (field && current) {
+            setTranscript((entries) => [...entries, { role: 'system', text: explainField(field, current) }]);
           }
         }
       }

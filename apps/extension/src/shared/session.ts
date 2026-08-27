@@ -6,6 +6,7 @@ export type SessionEvent =
   | { kind: 'awaiting_answer' }
   | { kind: 'clarifying' }
   | { kind: 'executing' }
+  | { kind: 'verifying' }
   | { kind: 'execution_done'; result: ExecutionResult; completedFieldIds: string[]; skippedFieldIds?: string[] }
   | { kind: 'reviewing_section' }
   | { kind: 'review_ack' }
@@ -16,17 +17,17 @@ export type SessionEvent =
   | { kind: 'cancelled' };
 
 const TRANSITIONS: Record<SessionPhase, ReadonlySet<SessionEvent['kind']>> = {
-  idle: new Set(['form_selected', 'cancelled']),
-  form_detected: new Set(['form_selected', 'cancelled']),
-  form_selected: new Set(['awaiting_answer', 'clarifying', 'executing', 'reviewing_section', 'cancelled']),
-  awaiting_answer: new Set(['clarifying', 'executing', 'reviewing_section', 'submit_requested', 'cancelled']),
-  clarifying: new Set(['awaiting_answer', 'executing', 'cancelled']),
-  executing: new Set(['verifying', 'awaiting_answer', 'clarifying', 'cancelled']),
-  verifying: new Set(['awaiting_answer', 'reviewing_section', 'submit_requested', 'cancelled']),
-  reviewing_section: new Set(['awaiting_answer', 'next_section', 'submit_requested', 'cancelled']),
-  awaiting_submit_confirmation: new Set(['submit_confirmed', 'reviewing_section', 'cancelled']),
-  submitted: new Set([]),
-  cancelled: new Set([]),
+  idle: new Set<SessionEvent['kind']>(['form_selected', 'cancelled']),
+  form_detected: new Set<SessionEvent['kind']>(['form_selected', 'cancelled']),
+  form_selected: new Set<SessionEvent['kind']>(['awaiting_answer', 'clarifying', 'executing', 'reviewing_section', 'cancelled']),
+  awaiting_answer: new Set<SessionEvent['kind']>(['clarifying', 'executing', 'verifying', 'reviewing_section', 'submit_requested', 'cancelled']),
+  clarifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'executing', 'cancelled']),
+  executing: new Set<SessionEvent['kind']>(['verifying', 'awaiting_answer', 'clarifying', 'cancelled']),
+  verifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'reviewing_section', 'submit_requested', 'cancelled']),
+  reviewing_section: new Set<SessionEvent['kind']>(['awaiting_answer', 'next_section', 'submit_requested', 'cancelled']),
+  awaiting_submit_confirmation: new Set<SessionEvent['kind']>(['submit_confirmed', 'reviewing_section', 'cancelled']),
+  submitted: new Set<SessionEvent['kind']>([]),
+  cancelled: new Set<SessionEvent['kind']>([]),
 };
 
 export function unresolvedRequired(state: SessionState): string[] {

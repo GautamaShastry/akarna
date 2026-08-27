@@ -44,10 +44,21 @@ async function executeInTab(tabId: number, session: SessionState, plan: ActionPl
 }
 
 function mutatingFieldIds(plan: ActionPlan): string[] {
-  return plan.actions
-    .filter((action): action is Extract<ActionPlan['actions'][number], { fieldId: string }> =>
-      action.type === 'fill' || action.type === 'correct' || action.type === 'select' || action.type === 'check' || action.type === 'uncheck' || action.type === 'clear')
-    .map((action) => action.fieldId);
+  const ids: string[] = [];
+  for (const action of plan.actions) {
+    if (action.type === 'fill' || action.type === 'correct' || action.type === 'select' || action.type === 'check' || action.type === 'uncheck' || action.type === 'clear') {
+      ids.push(action.fieldId);
+    }
+  }
+  return ids;
+}
+
+function skippedFieldIds(plan: ActionPlan): string[] {
+  const ids: string[] = [];
+  for (const action of plan.actions) {
+    if (action.type === 'skip') ids.push(action.fieldId);
+  }
+  return ids;
 }
 
 async function handlePanelMessage(message: ExtensionMessage, tabId: number): Promise<void> {
@@ -103,8 +114,7 @@ async function handlePanelMessage(message: ExtensionMessage, tabId: number): Pro
         return;
       }
       if (result.success) {
-        const skippedFieldIds = plan.actions.filter((action): action is Extract<typeof action, { type: 'skip'; fieldId: string }> => action.type === 'skip').map((action) => action.fieldId);
-        session = reduce(session, { kind: 'execution_done', result, completedFieldIds: mutatingFieldIds(plan), skippedFieldIds });
+        session = reduce(session, { kind: 'execution_done', result, completedFieldIds: mutatingFieldIds(plan), skippedFieldIds: skippedFieldIds(plan) });
       } else {
         session = reduce(session, { kind: 'schema_refreshed', schema: result.nextSchema });
         session = reduce(session, { kind: 'clarifying' });
@@ -197,8 +207,8 @@ listen((message, sender) => {
     }
     return;
   }
-  const routedTabId: number | null = pageTabId;
-  void (routedTabId ?? (await activeTabId())).then((tabId) => {
-    if (tabId !== null) void handlePanelMessage(message, tabId);
-  });
+  void (async () => {
+    const tabId = pageTabId ?? await activeTabId();
+    if (tabId !== null) await handlePanelMessage(message, tabId);
+  })();
 });

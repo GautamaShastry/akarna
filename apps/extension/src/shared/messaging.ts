@@ -24,7 +24,8 @@ export function listen(handler: (message: ExtensionMessage, sender: chrome.runti
       respond({ ok: false, error: 'unknown_message' });
       return false;
     }
-    return handler(parsed.data, sender);
+    const result = handler(parsed.data, sender);
+    return result === true ? true : undefined;
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => chrome.runtime.onMessage.removeListener(listener);

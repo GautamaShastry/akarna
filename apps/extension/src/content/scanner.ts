@@ -45,12 +45,20 @@ function labelText(control: SupportedControl): string {
   return normalizeText(control.getAttribute('name') ?? control.id);
 }
 
+const KIND_BY_INPUT_TYPE: Record<string, FieldKind> = {
+  text: 'text',
+  email: 'email',
+  tel: 'tel',
+  number: 'number',
+  date: 'date',
+  checkbox: 'checkbox',
+};
+
 function fieldKind(control: SupportedControl): FieldKind | null {
   if (control instanceof HTMLTextAreaElement) return 'textarea';
   if (control instanceof HTMLSelectElement) return 'select';
-  if (control instanceof HTMLInputElement && SUPPORTED_INPUT_TYPES.has(control.type)) {
-    return control.type === 'radio' ? 'radio_group' : control.type;
-  }
+  if (control instanceof HTMLInputElement && control.type === 'radio') return 'radio_group';
+  if (control instanceof HTMLInputElement) return KIND_BY_INPUT_TYPE[control.type] ?? null;
   return null;
 }
 
@@ -67,7 +75,7 @@ function controlsFor(form: HTMLFormElement): SupportedControl[] {
 
 function sectionId(control: SupportedControl): string {
   const section = control.closest('fieldset, section, [data-section]');
-  return section?.getAttribute('data-section') ?? normalizeText(section?.querySelector('legend')?.textContent ?? '') || 'section';
+  return section?.getAttribute('data-section') ?? (normalizeText(section?.querySelector('legend')?.textContent ?? '') || 'section');
 }
 
 function makeField(control: SupportedControl, elements: SupportedControl[], fieldId: string): ContractField {
@@ -79,10 +87,10 @@ function makeField(control: SupportedControl, elements: SupportedControl[], fiel
     : kind === 'radio_group'
       ? elements.map((radio) => ({ value: radio.value, label: labelText(radio) })).filter((option) => option.value)
       : undefined;
-  const currentValue = kind === 'checkbox'
+  const currentValue = control instanceof HTMLInputElement && control.type === 'checkbox'
     ? control.checked
     : kind === 'radio_group'
-      ? elements.find((radio) => radio.checked)?.value ?? ''
+      ? (elements.find((radio): radio is HTMLInputElement => radio instanceof HTMLInputElement && radio.checked)?.value ?? '')
       : control.value;
   return FieldSchema.parse({
     fieldId,
@@ -94,9 +102,11 @@ function makeField(control: SupportedControl, elements: SupportedControl[], fiel
     sensitive: isSensitive(control, label),
     currentValue,
     options,
-    constraints: control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement
+    constraints: control instanceof HTMLInputElement
       ? { min: control.min || undefined, max: control.max || undefined, pattern: control.pattern || undefined, inputMode: control.inputMode || undefined }
-      : undefined,
+      : control instanceof HTMLTextAreaElement
+        ? { inputMode: control.inputMode || undefined }
+        : undefined,
     sectionId: sectionId(control),
   });
 }

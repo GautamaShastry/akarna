@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Form } from '@akarna/contracts';
 import { clearRegistry, discoverForms, getRegistryEntry, rescanForm, scanForm, selectFormFromTarget, watchForm } from './scanner';
 
 afterEach(() => {
@@ -49,7 +50,7 @@ describe('form scanner', () => {
     vi.useFakeTimers();
     const form = fixture();
     const first = scanForm(form, 'https://fixture.test');
-    const onChange = vi.fn();
+    const onChange = vi.fn<(schema: Form) => void>();
     watchForm(form, onChange, 'https://fixture.test');
     const conditional = document.createElement('input');
     conditional.id = 'extra';
