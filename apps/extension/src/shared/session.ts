@@ -6,7 +6,7 @@ export type SessionEvent =
   | { kind: 'awaiting_answer' }
   | { kind: 'clarifying' }
   | { kind: 'executing' }
-  | { kind: 'execution_done'; result: ExecutionResult; completedFieldIds: string[] }
+  | { kind: 'execution_done'; result: ExecutionResult; completedFieldIds: string[]; skippedFieldIds?: string[] }
   | { kind: 'reviewing_section' }
   | { kind: 'review_ack' }
   | { kind: 'next_section' }
@@ -98,6 +98,7 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
         scanVersion: event.result.nextSchema.scanVersion,
         fingerprint: fingerprintOf(event.result.nextSchema),
         completedFieldIds: [...new Set([...state.completedFieldIds, ...event.completedFieldIds])],
+        skippedOptionalFieldIds: [...new Set([...state.skippedOptionalFieldIds, ...(event.skippedFieldIds ?? [])])],
       };
       break;
     case 'reviewing_section':

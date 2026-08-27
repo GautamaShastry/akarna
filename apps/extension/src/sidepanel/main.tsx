@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Clarification, ExecutionResult, SessionState } from '@akarna/contracts';
 import { listen, sendMessage } from '../shared/messaging';
+import { explainField, nextPrompt } from '../shared/explain';
 import './styles.css';
 
 type Entry = { role: 'user' | 'system' | 'error'; text: string };
@@ -48,19 +49,26 @@ function Panel(): ReactElement {
   const [input, setInput] = useState('');
   const [confirmText, setConfirmText] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const sessionRef = useRef<SessionState | null>(null);
+  sessionRef.current = session;
 
   useEffect(() => {
     const stop = listen((message) => {
       if (message.type === 'session_state') {
         setSession(message.session);
-        const next = message.session.nextFieldId;
-        const label = message.session.schema.fields.find((field) => field.fieldId === next)?.label;
-        if (label) setTranscript((entries) => [...entries, { role: 'system', text: `Next required field: ${label}` }]);
+        const prompt = nextPrompt(message.session);
+        if (prompt) setTranscript((entries) => [...entries, { role: 'system', text: prompt }]);
       } else if (message.type === 'clarification') {
         const note: Clarification = message.clarification;
         setTranscript((entries) => [...entries, { role: 'error', text: note.prompt + (note.candidates?.length ? ` Options: ${note.candidates.join(', ')}` : '') }]);
       } else if (message.type === 'execution_result') {
         setTranscript((entries) => [...entries, { role: message.result.success ? 'system' : 'error', text: explainResult(message.result) }]);
+        if (message.result.success && message.result.message.startsWith('Read ') && message.result.observedValue !== undefined) {
+          const field = message.result.nextSchema.fields.find((candidate) => String(candidate.currentValue ?? '') === String(message.result.observedValue));
+          if (field && sessionRef.current) {
+            setTranscript((entries) => [...entries, { role: 'system', text: explainField(field, sessionRef.current) }]);
+          }
+        }
       }
     });
     sendMessage({ protocolVersion: 1, sessionId: 'panel', type: 'start_session' });

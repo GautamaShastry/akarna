@@ -95,7 +95,8 @@ async function handlePanelMessage(message: ExtensionMessage, tabId: number): Pro
         return;
       }
       if (result.success) {
-        session = reduce(session, { kind: 'execution_done', result, completedFieldIds: mutatingFieldIds(plan) });
+        const skippedFieldIds = plan.actions.filter((action): action is Extract<typeof action, { type: 'skip'; fieldId: string }> => action.type === 'skip').map((action) => action.fieldId);
+        session = reduce(session, { kind: 'execution_done', result, completedFieldIds: mutatingFieldIds(plan), skippedFieldIds });
       } else {
         session = reduce(session, { kind: 'schema_refreshed', schema: result.nextSchema });
         session = reduce(session, { kind: 'clarifying' });
