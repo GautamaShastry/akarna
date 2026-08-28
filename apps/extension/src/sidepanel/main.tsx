@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { Clarification, ExecutionResult, SessionState } from '@akarna/contracts';
+import type { Clarification, ExecutionResult, SessionState, MicrophoneState } from '@akarna/contracts';
 import { listen, sendMessage } from '../shared/messaging';
 import { explainField, nextPrompt } from '../shared/explain';
 import './styles.css';
@@ -43,11 +43,31 @@ function sectionSummary(session: SessionState): ReactElement {
   );
 }
 
+function MicrophoneButton({ state, onStart, onStop }: { state: MicrophoneState; onStart: () => void; onStop: () => void }): ReactElement {
+  const isRecording = state === 'active';
+  const isRequesting = state === 'requesting';
+  const isError = state === 'error';
+
+  return (
+    <button
+      type="button"
+      className={`mic-button ${isRecording ? 'active' : ''} ${isError ? 'error' : ''}`}
+      onClick={isRecording ? onStop : onStart}
+      disabled={isRequesting}
+      aria-label={isRecording ? 'Stop microphone' : 'Start microphone'}
+    >
+      {isRequesting ? '⏳' : isRecording ? '🔴 Stop' : '🎤 Start voice'}
+      {isError && <span className="mic-error"> (retry)</span>}
+    </button>
+  );
+}
+
 function Panel(): ReactElement {
   const [session, setSession] = useState<SessionState | null>(null);
   const [transcript, setTranscript] = useState<Entry[]>([]);
   const [input, setInput] = useState('');
   const [confirmText, setConfirmText] = useState('');
+  const [micState, setMicState] = useState<MicrophoneState>('idle');
   const bottomRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<SessionState | null>(null);
   sessionRef.current = session;
@@ -70,6 +90,12 @@ function Panel(): ReactElement {
             setTranscript((entries) => [...entries, { role: 'system', text: explainField(field, current) }]);
           }
         }
+      } else if (message.type === 'microphone_state') {
+        setMicState(message.state);
+      } else if (message.type === 'transcription') {
+        if (message.segment.isFinal) {
+          setTranscript((entries) => [...entries, { role: 'user', text: message.segment.text }]);
+        }
       }
     });
     sendMessage({ protocolVersion: 1, sessionId: 'panel', type: 'start_session' });
@@ -79,6 +105,14 @@ function Panel(): ReactElement {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcript]);
+
+  const handleMicStart = useCallback(() => {
+    sendMessage({ protocolVersion: 1, sessionId: session?.sessionId ?? 'panel', type: 'start_microphone' });
+  }, [session]);
+
+  const handleMicStop = useCallback(() => {
+    sendMessage({ protocolVersion: 1, sessionId: session?.sessionId ?? 'panel', type: 'stop_microphone' });
+  }, [session]);
 
   function submitCommand(): void {
     const command = input.trim();
@@ -105,11 +139,16 @@ function Panel(): ReactElement {
       <header>
         <p className="eyebrow">Akarna</p>
         <h1>Form assistant</h1>
-        {session && <p className="phase">Phase: {session.phase}{session.pendingSubmitConfirmation ? ' — type “Yes, submit” to confirm' : ''}</p>}
+        {session && <p className="phase">Phase: {session.phase}{session.pendingSubmitConfirmation ? ' — type "Yes, submit" to confirm' : ''}</p>}
       </header>
 
+      <section className="mic-controls" aria-label="Microphone controls">
+        <MicrophoneButton state={micState} onStart={handleMicStart} onStop={handleMicStop} />
+        {micState === 'active' && <span className="mic-indicator">Recording</span>}
+      </section>
+
       <section aria-label="Transcript" className="transcript">
-        {transcript.length === 0 && <p className="muted">Type a command like “Set highest degree to Master’s and graduation date to December 15 2025.”</p>}
+        {transcript.length === 0 && <p className="muted">Type a command like "Set highest degree to Master's and graduation date to December 15 2025."</p>}
         {transcript.map((entry, index) => (
           <p key={index} className={entry.role}>{entry.text}</p>
         ))}

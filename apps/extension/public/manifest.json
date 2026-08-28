@@ -3,7 +3,7 @@
   "name": "Akarna",
   "version": "0.1.0",
   "description": "A safe, conversational form assistant.",
-  "permissions": ["storage", "sidePanel", "scripting"],
+  "permissions": ["storage", "sidePanel", "scripting", "microphone"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",

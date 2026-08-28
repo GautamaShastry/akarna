@@ -4,9 +4,12 @@ import { listen, sendMessage } from '../shared/messaging';
 import { createSession, persistable, reduce, unresolvedRequired } from '../shared/session';
 import { validatePlan } from '../shared/validator';
 
+import { reduceMicrophone, type MicrophoneState } from '../shared/microphone';
+
 const sessions = new Map<number, SessionState>();
 const adapter = new FixtureCommandAdapter();
 let pageTabId: number | null = null;
+let micState: MicrophoneState = 'idle';
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -177,7 +180,26 @@ async function handlePanelMessage(message: ExtensionMessage, tabId: number): Pro
       if (!session) return;
       session = reduce(session, { kind: 'cancelled' });
       sessions.set(tabId, session);
+      // Stop microphone if session ends.
+      if (micState !== 'idle') {
+        micState = reduceMicrophone(micState, { kind: 'end_session' });
+        sendMessage({ protocolVersion: 1, sessionId: session.sessionId, type: 'microphone_state', state: micState });
+      }
       publishState(session);
+      return;
+    }
+    case 'start_microphone': {
+      micState = reduceMicrophone(micState, { kind: 'request' });
+      sendMessage({ protocolVersion: 1, sessionId: session?.sessionId ?? 'panel', type: 'microphone_state', state: micState });
+      // In production, request chrome.tabCapture or getUserMedia here.
+      // For now, simulate permission grant.
+      micState = reduceMicrophone(micState, { kind: 'granted' });
+      sendMessage({ protocolVersion: 1, sessionId: session?.sessionId ?? 'panel', type: 'microphone_state', state: micState });
+      return;
+    }
+    case 'stop_microphone': {
+      micState = reduceMicrophone(micState, { kind: 'stop' });
+      sendMessage({ protocolVersion: 1, sessionId: session?.sessionId ?? 'panel', type: 'microphone_state', state: micState });
       return;
     }
     default:

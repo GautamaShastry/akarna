@@ -127,3 +127,68 @@ export const ExtensionMessageSchema = z.discriminatedUnion('type', [
 export type ExtensionMessage = z.infer<typeof ExtensionMessageSchema>;
 
 export { StrictObject };
+
+// Milestone 1: Microphone and transcription contracts
+
+export const MicrophoneStateSchema = z.enum([
+  'idle', 'requesting', 'active', 'paused', 'stopping', 'error',
+]);
+export type MicrophoneState = z.infer<typeof MicrophoneStateSchema>;
+
+export const MicrophoneEventSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('request') }),
+  z.object({ kind: z.literal('granted') }),
+  z.object({ kind: z.literal('denied') }),
+  z.object({ kind: z.literal('start') }),
+  z.object({ kind: z.literal('pause') }),
+  z.object({ kind: z.literal('stop') }),
+  z.object({ kind: z.literal('end_session') }),
+  z.object({ kind: z.literal('error'), error: z.string() }).strict(),
+]);
+export type MicrophoneEvent = z.infer<typeof MicrophoneEventSchema>;
+
+export const TranscriptionSegmentSchema = z.object({
+  text: z.string().min(1),
+  isFinal: z.boolean(),
+  timestamp: z.number(),
+}).strict();
+export type TranscriptionSegment = z.infer<typeof TranscriptionSegmentSchema>;
+
+export const IntentRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  mode: z.enum(['local', 'cloud_redacted']),
+  schema: FormSchema,
+  command: z.string().min(1),
+  scanVersion: z.number().int().positive(),
+}).strict();
+export type IntentRequest = z.infer<typeof IntentRequestSchema>;
+
+export const IntentResponseSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('action_plan'), plan: ActionPlanSchema }).strict(),
+  z.object({ kind: z.literal('clarification'), clarification: ClarificationSchema }).strict(),
+]);
+export type IntentResponse = z.infer<typeof IntentResponseSchema>;
+
+export const ConversationEventSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('user_spoke'), text: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('transcription'), segment: TranscriptionSegmentSchema }).strict(),
+  z.object({ kind: z.literal('assistant_spoke'), text: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('interruption') }).strict(),
+  z.object({ kind: z.literal('correction'), fieldId: z.string().min(1), value: z.string() }).strict(),
+  z.object({ kind: z.literal('explain_request'), fieldId: z.string().min(1) }).strict(),
+]);
+export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
+
+// Extended message schema for Milestone 1 features
+export const Milestone1MessageSchema = z.discriminatedUnion('type', [
+  ProtocolEnvelopeSchema.extend({ type: z.literal('microphone_state'), state: MicrophoneStateSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('start_microphone') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('stop_microphone') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('transcription'), segment: TranscriptionSegmentSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('intent_request'), request: IntentRequestSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('intent_response'), response: IntentResponseSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('conversation_event'), event: ConversationEventSchema }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('speak'), text: z.string().min(1) }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('stop_speaking') }),
+]);
+export type Milestone1Message = z.infer<typeof Milestone1MessageSchema>;
