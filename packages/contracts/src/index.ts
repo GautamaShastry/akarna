@@ -231,6 +231,88 @@ export const PreflightResultSchema = z.object({
 }).strict();
 export type PreflightResult = z.infer<typeof PreflightResultSchema>;
 
+// Milestone 3: Privacy, profiles, and source-backed suggestions
+
+export const InterpretationModeSchema = z.enum(['local', 'cloud_redacted']);
+export type InterpretationMode = z.infer<typeof InterpretationModeSchema>;
+
+export const PrivacyConsentSchema = z.object({
+  mode: InterpretationModeSchema,
+  acknowledgedAt: z.number(),
+  dataBoundary: z.string().min(1),
+}).strict();
+export type PrivacyConsent = z.infer<typeof PrivacyConsentSchema>;
+
+export const PrivacyModeStateSchema = z.object({
+  consented: z.boolean(),
+  consent: PrivacyConsentSchema.optional(),
+}).strict();
+export type PrivacyModeState = z.infer<typeof PrivacyModeStateSchema>;
+
+export const SensitiveFieldPolicySchema = z.object({
+  cannotReadAloud: z.boolean(),
+  cannotSendToProvider: z.boolean(),
+  cannotShowInReview: z.boolean(),
+  cannotStore: z.boolean(),
+  cannotSourceFill: z.boolean(),
+}).strict();
+export type SensitiveFieldPolicy = z.infer<typeof SensitiveFieldPolicySchema>;
+
+export const ProfileFieldSchema = z.object({
+  fieldId: z.string().min(1),
+  label: z.string().min(1),
+  value: z.string(),
+  encrypted: z.boolean(),
+  consentedAt: z.number().optional(),
+}).strict();
+export type ProfileField = z.infer<typeof ProfileFieldSchema>;
+
+export const ProfileSchema = z.object({
+  profileId: z.string().min(1),
+  name: z.string().min(1),
+  fields: z.array(ProfileFieldSchema),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+}).strict();
+export type Profile = z.infer<typeof ProfileSchema>;
+
+export const DocumentExtractionCandidateSchema = z.object({
+  candidateId: z.string().min(1),
+  documentId: z.string().min(1),
+  fieldId: z.string().min(1),
+  fieldLabel: z.string().min(1),
+  value: z.string(),
+  sourceText: z.string().min(1),
+  pageLocator: z.string().optional(),
+  confidence: z.number().min(0).max(1),
+  provenance: z.string().min(1),
+}).strict();
+export type DocumentExtractionCandidate = z.infer<typeof DocumentExtractionCandidateSchema>;
+
+export const ImportedDocumentSchema = z.object({
+  documentId: z.string().min(1),
+  name: z.string().min(1),
+  type: z.string().min(1),
+  importedAt: z.number(),
+  revokedAt: z.number().optional(),
+  extractionCount: z.number().int().nonnegative(),
+}).strict();
+export type ImportedDocument = z.infer<typeof ImportedDocumentSchema>;
+
+export const SourceSuggestionSchema = z.object({
+  suggestionId: z.string().min(1),
+  fieldId: z.string().min(1),
+  candidateId: z.string().min(1),
+  value: z.string(),
+  confidence: z.number().min(0).max(1),
+  sourceDocumentId: z.string().min(1),
+  sourceText: z.string().min(1),
+  pageLocator: z.string().optional(),
+  approved: z.boolean(),
+  sensitive: z.boolean(),
+}).strict();
+export type SourceSuggestion = z.infer<typeof SourceSuggestionSchema>;
+
 // Extended message schema for Milestone 1 features
 export const Milestone1MessageSchema = z.discriminatedUnion('type', [
   ProtocolEnvelopeSchema.extend({ type: z.literal('microphone_state'), state: MicrophoneStateSchema }),

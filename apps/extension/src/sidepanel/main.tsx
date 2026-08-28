@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { Clarification, ExecutionResult, SessionState, MicrophoneState } from '@akarna/contracts';
+import type { Clarification, ExecutionResult, SessionState, MicrophoneState, InterpretationMode } from '@akarna/contracts';
 import { listen, sendMessage } from '../shared/messaging';
 import { explainField, nextPrompt } from '../shared/explain';
+import { createPrivacyState, consentToMode, getDataBoundary, type PrivacyModeState } from '../shared/privacy';
 import './styles.css';
 
 type Entry = { role: 'user' | 'system' | 'error'; text: string };
@@ -62,7 +63,43 @@ function MicrophoneButton({ state, onStart, onStop }: { state: MicrophoneState; 
   );
 }
 
+function PrivacyOnboarding({ onConsent }: { onConsent: (mode: InterpretationMode) => void }): ReactElement {
+  const [selectedMode, setSelectedMode] = useState<InterpretationMode | null>(null);
+
+  return (
+    <main className="panel">
+      <header>
+        <p className="eyebrow">Akarna</p>
+        <h1>Privacy settings</h1>
+      </header>
+      <section className="privacy-onboarding">
+        <p>Choose how Akarna interprets your commands. This affects where your data is sent.</p>
+        <div className="privacy-options">
+          <label className={`privacy-option ${selectedMode === 'local' ? 'selected' : ''}`}>
+            <input type="radio" name="privacy-mode" value="local" onChange={() => setSelectedMode('local')} />
+            <div>
+              <strong>Local only</strong>
+              <p>{getDataBoundary('local')}</p>
+            </div>
+          </label>
+          <label className={`privacy-option ${selectedMode === 'cloud_redacted' ? 'selected' : ''}`}>
+            <input type="radio" name="privacy-mode" value="cloud_redacted" onChange={() => setSelectedMode('cloud_redacted')} />
+            <div>
+              <strong>Cloud (redacted)</strong>
+              <p>{getDataBoundary('cloud_redacted')}</p>
+            </div>
+          </label>
+        </div>
+        <button type="button" className="primary-button" disabled={!selectedMode} onClick={() => selectedMode && onConsent(selectedMode)}>
+          Continue with {selectedMode === 'local' ? 'local' : selectedMode === 'cloud_redacted' ? 'cloud' : ''} mode
+        </button>
+      </section>
+    </main>
+  );
+}
+
 function Panel(): ReactElement {
+  const [privacy, setPrivacy] = useState<PrivacyModeState>(() => createPrivacyState());
   const [session, setSession] = useState<SessionState | null>(null);
   const [transcript, setTranscript] = useState<Entry[]>([]);
   const [input, setInput] = useState('');
@@ -98,9 +135,16 @@ function Panel(): ReactElement {
         }
       }
     });
-    sendMessage({ protocolVersion: 1, sessionId: 'panel', type: 'start_session' });
+    // Don't start session until privacy mode is selected
     return stop;
   }, []);
+
+  // Start session once privacy is consented
+  useEffect(() => {
+    if (privacy.consented) {
+      sendMessage({ protocolVersion: 1, sessionId: 'panel', type: 'start_session' });
+    }
+  }, [privacy.consented]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -132,6 +176,14 @@ function Panel(): ReactElement {
     setTranscript((entries) => [...entries, { role: 'user', text: 'Yes, submit' }]);
     setConfirmText('');
     sendMessage({ protocolVersion: 1, sessionId: session.sessionId, type: 'submit_confirmation' });
+  }
+
+  const handlePrivacyConsent = useCallback((mode: InterpretationMode) => {
+    setPrivacy(consentToMode(privacy, mode));
+  }, [privacy]);
+
+  if (!privacy.consented) {
+    return <PrivacyOnboarding onConsent={handlePrivacyConsent} />;
   }
 
   return (
