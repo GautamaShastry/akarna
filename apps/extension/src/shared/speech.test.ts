@@ -97,7 +97,7 @@ describe('explainField', () => {
     const field = makeField({ required: true });
     const session = makeSession();
     const explanation = explainField(field, session);
-    expect(explanation).toContain('Full name');
+    expect(explanation).toContain('full name');
     expect(explanation).toContain('required');
   });
 
@@ -175,7 +175,7 @@ describe('sectionSummary', () => {
     const session = makeSession();
     const summary = sectionSummary(session);
     expect(summary).toContain('required');
-    expect(summary).toContain('remaining');
+    expect(summary).toContain('need input');
   });
 });
 
@@ -196,7 +196,7 @@ describe('speakFieldExplanation', () => {
     const session = makeSession();
     speakFieldExplanation(field, session, speech);
     expect(speech.getSpokenTexts()).toHaveLength(1);
-    expect(speech.getLastSpoken()).toContain('Full name');
+    expect(speech.getLastSpoken()).toContain('full name');
   });
 
   it('does not speak sensitive field values', () => {

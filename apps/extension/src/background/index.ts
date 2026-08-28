@@ -4,7 +4,8 @@ import { listen, sendMessage } from '../shared/messaging';
 import { createSession, persistable, reduce, unresolvedRequired } from '../shared/session';
 import { validatePlan } from '../shared/validator';
 
-import { reduceMicrophone, type MicrophoneState } from '../shared/microphone';
+import { reduceMicrophone } from '../shared/microphone';
+import type { MicrophoneState } from '@akarna/contracts';
 
 const sessions = new Map<number, SessionState>();
 const adapter = new FixtureCommandAdapter();

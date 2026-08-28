@@ -123,6 +123,13 @@ export const ExtensionMessageSchema = z.discriminatedUnion('type', [
   ProtocolEnvelopeSchema.extend({ type: z.literal('next_section') }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('review_ack') }),
   ProtocolEnvelopeSchema.extend({ type: z.literal('cancel_session') }),
+  // Milestone 1 message types
+  ProtocolEnvelopeSchema.extend({ type: z.literal('microphone_state'), state: z.enum(['idle', 'requesting', 'active', 'paused', 'stopping', 'error']) }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('start_microphone') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('stop_microphone') }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('transcription'), segment: z.object({ text: z.string().min(1), isFinal: z.boolean(), timestamp: z.number() }).strict() }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('speak'), text: z.string().min(1) }),
+  ProtocolEnvelopeSchema.extend({ type: z.literal('stop_speaking') }),
 ]);
 export type ExtensionMessage = z.infer<typeof ExtensionMessageSchema>;
 
