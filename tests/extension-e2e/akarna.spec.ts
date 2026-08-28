@@ -1,6 +1,7 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
-const FIXTURE = 'http://localhost:4173';
+const FIXTURE = 'http://localhost:4173/flat.html';
 
 async function openPanel(context: BrowserContext, fixturePage: Page): Promise<Page> {
   let serviceWorkerUrl = '';
@@ -26,12 +27,16 @@ async function send(panel: Page, command: string): Promise<void> {
   await panel.getByRole('button', { name: 'Send' }).click();
 }
 
-test('milestone 0 acceptance flow', async ({ context }) => {
+test('milestone 0 acceptance flow', async ({ context, extensionId }) => {
+  await expect.poll(() => context.serviceWorkers().some((worker) => worker.url().includes(extensionId)), { timeout: 15_000 }).toBe(true);
   const fixturePage = await context.newPage();
   await fixturePage.goto(FIXTURE);
 
+  // Wait for the React fixture before asserting content-script UI. The
+  // extension runs at document_idle and observes the form after hydration.
+  await expect(fixturePage.locator('form[aria-label="Job application form"]')).toBeVisible();
   const chip = fixturePage.locator('#akarna-start-chip');
-  await expect(chip).toBeVisible();
+  await expect(chip).toBeVisible({ timeout: 15_000 });
 
   const panel = await openPanel(context, fixturePage);
   await send(panel, 'set full name to Ada Lovelace');

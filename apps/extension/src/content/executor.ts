@@ -138,11 +138,15 @@ export function executeAction(schema: Form, action: Action, form: HTMLFormElemen
 
 export function executePlan(schema: Form, plan: ActionPlan, form: HTMLFormElement): ExecutionResult {
   let currentSchema = schema;
+  let lastResult: ExecutionResult | null = null;
   for (const action of plan.actions) {
     const outcome = executeAction(currentSchema, action, form);
     if (!outcome) return fail('Unhandled action.', 'unknown_action', currentSchema);
     if (!outcome.result.success) return outcome.result;
     currentSchema = outcome.result.nextSchema;
+    lastResult = outcome.result;
   }
-  return { success: true, message: 'Plan applied.', nextSchema: currentSchema };
+  if (!lastResult) return { success: true, message: 'No actions to apply.', nextSchema: currentSchema };
+  // Surface the final action's message/observedValue, with the fully-updated schema.
+  return { ...lastResult, nextSchema: currentSchema };
 }

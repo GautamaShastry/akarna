@@ -140,6 +140,7 @@ async function handlePanelMessage(message: ExtensionMessage, tabId: number): Pro
       }
       session = reduce(session, { kind: 'submit_requested' });
       sessions.set(tabId, session);
+      sendMessage({ protocolVersion: 1, sessionId: session.sessionId, type: 'clarification', clarification: { prompt: 'Final check: type "Yes, submit" to send the form, or "cancel" to stop.' } });
       publishState(session);
       return;
     }

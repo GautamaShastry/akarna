@@ -63,14 +63,33 @@ function selectForm(target: EventTarget | null): void {
 document.addEventListener('focusin', (event) => selectForm(event.target), true);
 document.addEventListener('click', (event) => selectForm(event.target), true);
 
-for (const form of discoverForms()) {
-  watchForm(form, (schema) => {
-    refreshChip();
-    void chrome.runtime.sendMessage({ protocolVersion: 1, sessionId: 'page', type: 'schema_result', schema });
-  });
+const watchedForms = new WeakSet<HTMLFormElement>();
+
+function announceSchema(schema: Form): void {
+  refreshChip();
+  void chrome.runtime.sendMessage({ protocolVersion: 1, sessionId: 'page', type: 'schema_result', schema });
 }
 
-refreshChip();
+function syncForms(): void {
+  for (const form of discoverForms()) {
+    if (watchedForms.has(form)) continue;
+    watchedForms.add(form);
+    watchForm(form, announceSchema);
+    // Announce right away so the background can bind this tab even when the
+    // form was rendered by client-side script after the initial scan.
+    announceSchema(scanForm(form));
+  }
+  refreshChip();
+}
+
+let syncScheduled: number | undefined;
+const domObserver = new MutationObserver(() => {
+  window.clearTimeout(syncScheduled);
+  syncScheduled = window.setTimeout(syncForms, 50);
+});
+domObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+syncForms();
 
 chrome.runtime.onMessage.addListener((raw: unknown, _sender, sendResponse): boolean => {
   const parsed = ExtensionMessageSchema.safeParse(raw);
@@ -123,6 +142,7 @@ chrome.runtime.onMessage.addListener((raw: unknown, _sender, sendResponse): bool
 });
 
 window.addEventListener('pagehide', () => {
+  domObserver.disconnect();
   for (const form of discoverForms()) unwatchForm(form);
 });
 
