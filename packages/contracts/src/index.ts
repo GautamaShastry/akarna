@@ -186,6 +186,51 @@ export const ConversationEventSchema = z.discriminatedUnion('kind', [
 ]);
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
 
+// Milestone 2: Timeline and Preflight contracts
+
+export const TimelineSourceSchema = z.enum(['agent', 'user', 'external']);
+export type TimelineSource = z.infer<typeof TimelineSourceSchema>;
+
+export const TimelineActionTypeSchema = z.enum([
+  'fill', 'select', 'check', 'uncheck', 'correct', 'clear',
+]);
+export type TimelineActionType = z.infer<typeof TimelineActionTypeSchema>;
+
+export const TimelineStatusSchema = z.enum(['applied', 'undone', 'overridden']);
+export type TimelineStatus = z.infer<typeof TimelineStatusSchema>;
+
+export const TimelineEntrySchema = z.object({
+  actionId: z.string().min(1),
+  fieldId: z.string().min(1),
+  actionType: TimelineActionTypeSchema,
+  before: z.union([z.string(), z.boolean()]).nullable(),
+  after: z.union([z.string(), z.boolean()]).nullable(),
+  source: TimelineSourceSchema,
+  status: TimelineStatusSchema,
+  scanVersion: z.number().int().positive(),
+  timestamp: z.number(),
+}).strict();
+export type TimelineEntry = z.infer<typeof TimelineEntrySchema>;
+
+export const PreflightFlagSeveritySchema = z.enum(['error', 'warning', 'info']);
+export type PreflightFlagSeverity = z.infer<typeof PreflightFlagSeveritySchema>;
+
+export const PreflightFlagSchema = z.object({
+  code: z.string().min(1),
+  message: z.string().min(1),
+  severity: PreflightFlagSeveritySchema,
+  fieldId: z.string().optional(),
+  sectionId: z.string().optional(),
+}).strict();
+export type PreflightFlag = z.infer<typeof PreflightFlagSchema>;
+
+export const PreflightResultSchema = z.object({
+  flags: z.array(PreflightFlagSchema),
+  isValid: z.boolean(),
+  isComplete: z.boolean(),
+}).strict();
+export type PreflightResult = z.infer<typeof PreflightResultSchema>;
+
 // Extended message schema for Milestone 1 features
 export const Milestone1MessageSchema = z.discriminatedUnion('type', [
   ProtocolEnvelopeSchema.extend({ type: z.literal('microphone_state'), state: MicrophoneStateSchema }),
