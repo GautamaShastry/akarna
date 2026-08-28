@@ -19,4 +19,4 @@ jobs:
       - run: pnpm test
       - run: pnpm -r build
       - run: pnpm --filter @akarna/e2e exec playwright install --with-deps chromium
-      - run: pnpm --filter @akarna/e2e test
+      - run: xvfb-run -a pnpm --filter @akarna/e2e test
