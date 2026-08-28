@@ -22,6 +22,15 @@ async function panelSays(panel: Page, text: string | RegExp): Promise<void> {
   await expect(panel.locator('.transcript')).toContainText(text, { timeout: 15_000 });
 }
 
+async function selectPrivacyMode(panel: Page): Promise<void> {
+  // Wait for privacy onboarding screen
+  const localOption = panel.getByText('Local only');
+  if (await localOption.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await panel.locator('input[value="local"]').click();
+    await panel.getByRole('button', { name: /Continue with/ }).click();
+  }
+}
+
 async function send(panel: Page, command: string): Promise<void> {
   await panel.getByLabel('Command input').fill(command);
   await panel.getByRole('button', { name: 'Send' }).click();
@@ -39,6 +48,7 @@ test('milestone 0 acceptance flow', async ({ context, extensionId }) => {
   await expect(chip).toBeVisible({ timeout: 15_000 });
 
   const panel = await openPanel(context, fixturePage);
+  await selectPrivacyMode(panel);
   await send(panel, 'set full name to Ada Lovelace');
   await expect.poll(() => fixturePage.locator('#full-name').inputValue(), { timeout: 15_000 }).toBe('Ada Lovelace');
   await panelSays(panel, /Applied fill/i);
