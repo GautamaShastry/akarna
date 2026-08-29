@@ -23,16 +23,27 @@ async function panelSays(panel: Page, text: string | RegExp): Promise<void> {
 }
 
 async function selectPrivacyMode(panel: Page): Promise<void> {
-  // Wait for privacy onboarding screen
-  const localOption = panel.getByText('Local only');
-  if (await localOption.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await panel.locator('input[value="local"]').click();
-    await panel.getByRole('button', { name: /Continue with/ }).click();
+  // Wait for privacy onboarding screen — the radio uses value="local"
+  const radio = panel.locator('input[type="radio"][value="local"]');
+  try {
+    await radio.waitFor({ state: 'visible', timeout: 5_000 });
+  } catch {
+    return; // Already past onboarding
   }
+  // Click the label to trigger React onChange reliably
+  await panel.locator('label').filter({ hasText: 'Local only' }).click();
+  // Wait for the Continue button to become enabled then click
+  const continueBtn = panel.getByRole('button', { name: /Continue with local/ });
+  await continueBtn.waitFor({ state: 'visible', timeout: 3_000 });
+  await continueBtn.click();
+  // Wait for the command input to appear after privacy consent
+  await panel.getByLabel('Command input').waitFor({ state: 'visible', timeout: 10_000 });
 }
 
 async function send(panel: Page, command: string): Promise<void> {
-  await panel.getByLabel('Command input').fill(command);
+  const input = panel.getByLabel('Command input');
+  await input.waitFor({ state: 'visible', timeout: 10_000 });
+  await input.fill(command);
   await panel.getByRole('button', { name: 'Send' }).click();
 }
 
