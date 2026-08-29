@@ -1,0 +1,139 @@
+import { SessionStateSchema, type ExecutionResult, type Form, type SessionPhase, type SessionState } from '@akarna/contracts';
+
+export type SessionEvent =
+  | { kind: 'form_selected'; schema: Form }
+  | { kind: 'schema_refreshed'; schema: Form }
+  | { kind: 'awaiting_answer' }
+  | { kind: 'clarifying' }
+  | { kind: 'executing' }
+  | { kind: 'verifying' }
+  | { kind: 'execution_done'; result: ExecutionResult; completedFieldIds: string[]; skippedFieldIds?: string[] }
+  | { kind: 'reviewing_section' }
+  | { kind: 'review_ack' }
+  | { kind: 'next_section' }
+  | { kind: 'submit_requested' }
+  | { kind: 'submit_confirmed' }
+  | { kind: 'submit_result'; success: boolean }
+  | { kind: 'cancelled' };
+
+const TRANSITIONS: Record<SessionPhase, ReadonlySet<SessionEvent['kind']>> = {
+  idle: new Set<SessionEvent['kind']>(['form_selected', 'cancelled']),
+  form_detected: new Set<SessionEvent['kind']>(['form_selected', 'schema_refreshed', 'cancelled']),
+  form_selected: new Set<SessionEvent['kind']>(['awaiting_answer', 'clarifying', 'executing', 'schema_refreshed', 'reviewing_section', 'cancelled']),
+  awaiting_answer: new Set<SessionEvent['kind']>(['awaiting_answer', 'clarifying', 'executing', 'verifying', 'schema_refreshed', 'reviewing_section', 'submit_requested', 'cancelled']),
+  clarifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'executing', 'schema_refreshed', 'cancelled']),
+  executing: new Set<SessionEvent['kind']>(['verifying', 'execution_done', 'awaiting_answer', 'clarifying', 'schema_refreshed', 'cancelled']),
+  verifying: new Set<SessionEvent['kind']>(['awaiting_answer', 'execution_done', 'schema_refreshed', 'reviewing_section', 'submit_requested', 'submit_result', 'cancelled']),
+  reviewing_section: new Set<SessionEvent['kind']>(['awaiting_answer', 'next_section', 'schema_refreshed', 'submit_requested', 'cancelled']),
+  awaiting_submit_confirmation: new Set<SessionEvent['kind']>(['submit_confirmed', 'schema_refreshed', 'reviewing_section', 'cancelled']),
+  submitted: new Set<SessionEvent['kind']>([]),
+  cancelled: new Set<SessionEvent['kind']>([]),
+};
+
+export function unresolvedRequired(state: SessionState): string[] {
+  return state.schema.fields
+    .filter((field) => field.required && field.visible && !field.disabled && !field.sensitive)
+    .map((field) => field.fieldId)
+    .filter((fieldId) => !state.completedFieldIds.includes(fieldId) && !state.skippedOptionalFieldIds.includes(fieldId));
+}
+
+export function fingerprintOf(schema: Form): string {
+  return JSON.stringify(schema.fields.map((field) => [field.kind, field.label, field.required, field.disabled, field.visible, field.sensitive, field.sectionId, field.options]));
+}
+
+export function createSession(sessionId: string, schema: Form): SessionState {
+  const base: SessionState = {
+    sessionId,
+    formId: schema.formId,
+    pageUrl: schema.pageUrl,
+    phase: 'form_selected',
+    scanVersion: schema.scanVersion,
+    fingerprint: fingerprintOf(schema),
+    completedFieldIds: [],
+    skippedOptionalFieldIds: [],
+    unresolvedRequiredFieldIds: [],
+    currentSectionId: schema.fields[0]?.sectionId,
+    pendingSubmitConfirmation: false,
+    schema,
+  };
+  const unresolved = unresolvedRequired(base);
+  return { ...base, unresolvedRequiredFieldIds: unresolved, nextFieldId: unresolved[0] };
+}
+
+export class TransitionError extends Error {
+  constructor(public readonly from: SessionPhase, public readonly event: SessionEvent['kind']) {
+    super(`Illegal transition: ${from} --${event}-->`);
+  }
+}
+
+export function reduce(state: SessionState, event: SessionEvent): SessionState {
+  if (!TRANSITIONS[state.phase].has(event.kind)) throw new TransitionError(state.phase, event.kind);
+
+  let next: SessionState = state;
+  switch (event.kind) {
+    case 'form_selected':
+      next = createSession(state.sessionId, event.schema);
+      break;
+    case 'schema_refreshed': {
+      const fingerprint = fingerprintOf(event.schema);
+      if (fingerprint === state.fingerprint && event.schema.scanVersion === state.scanVersion) return state;
+      next = {
+        ...state,
+        schema: event.schema,
+        scanVersion: event.schema.scanVersion,
+        fingerprint,
+        currentSectionId: event.schema.fields[0]?.sectionId ?? state.currentSectionId,
+      };
+      break;
+    }
+    case 'awaiting_answer':
+    case 'clarifying':
+    case 'executing':
+    case 'verifying':
+      next = { ...state, phase: event.kind };
+      break;
+    case 'execution_done':
+      next = {
+        ...state,
+        phase: 'awaiting_answer',
+        schema: event.result.nextSchema,
+        scanVersion: event.result.nextSchema.scanVersion,
+        fingerprint: fingerprintOf(event.result.nextSchema),
+        completedFieldIds: [...new Set([...state.completedFieldIds, ...event.completedFieldIds])],
+        skippedOptionalFieldIds: [...new Set([...state.skippedOptionalFieldIds, ...(event.skippedFieldIds ?? [])])],
+      };
+      break;
+    case 'reviewing_section':
+      next = { ...state, phase: 'reviewing_section' };
+      break;
+    case 'review_ack':
+    case 'next_section':
+      next = { ...state, phase: 'awaiting_answer' };
+      break;
+    case 'submit_requested':
+      next = { ...state, phase: 'awaiting_submit_confirmation', pendingSubmitConfirmation: true };
+      break;
+    case 'submit_confirmed':
+      next = { ...state, phase: 'verifying', pendingSubmitConfirmation: false };
+      break;
+    case 'submit_result':
+      next = event.success
+        ? { ...state, phase: 'submitted', pendingSubmitConfirmation: false }
+        : { ...state, phase: 'reviewing_section', pendingSubmitConfirmation: false };
+      break;
+    case 'cancelled':
+      next = { ...state, phase: 'cancelled', pendingSubmitConfirmation: false };
+      break;
+  }
+
+  next = { ...next, unresolvedRequiredFieldIds: unresolvedRequired(next), nextFieldId: unresolvedRequired(next)[0] };
+  return SessionStateSchema.parse(next);
+}
+
+export type PersistedSession = Omit<SessionState, 'schema'>;
+
+export function persistable(state: SessionState): PersistedSession {
+  const { schema: _schema, ...rest } = state;
+  void _schema;
+  return rest;
+}
