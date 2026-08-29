@@ -4,7 +4,7 @@ Akarna is a safety-first, conversational browser extension that helps users comp
 
 ## Current status
 
-**Milestone 0 is complete.** The current prototype supports a local React fixture form and a Chrome Manifest V3 extension demonstrating deterministic form assistance.
+**Milestones 0–3 are complete and merged into `main`.** The current prototype supports a local React fixture form and a Chrome Manifest V3 extension demonstrating deterministic form assistance, voice/conversational infrastructure, reliability controls, and privacy-aware trusted answers.
 
 Milestone 0 includes:
 
@@ -19,7 +19,25 @@ Milestone 0 includes:
 - Playwright acceptance coverage for the end-to-end flow.
 - GitHub Actions checks for typecheck, lint, unit tests, build, and E2E.
 
-Later milestones may add capabilities such as provider integrations, voice input, profiles, and production form support. Those are intentionally outside the current prototype scope.
+Milestone 1 adds:
+
+- Microphone lifecycle and streaming transcription abstractions.
+- Typed intent-provider contracts and a FastAPI proxy boundary.
+- Conversation orchestration, explanations, and speech output with sensitive-value redaction.
+
+Milestone 2 adds:
+
+- Non-sensitive action timeline with source metadata and undo support.
+- Manual-edit reconciliation and stale-session protection.
+- Resumable session persistence and deterministic preflight validation.
+
+Milestone 3 adds:
+
+- Local or cloud-redacted privacy onboarding.
+- Sensitive-field restrictions across speech, review, storage, provider, and source-backed flows.
+- Consent-aware encrypted-profile, approved-document, provenance, and source-suggestion primitives.
+
+The current release is still a safety-focused prototype. Production-grade provider integration, broad website compatibility, complete encrypted sync, and expanded end-to-end coverage remain future work.
 
 ## Repository layout
 
@@ -109,6 +127,12 @@ Sensitive fields are detected and surfaced as private-entry-only targets; the as
 ## Updating this README
 
 This README describes the implemented product, not the entire long-term vision. Whenever a milestone is completed, update the **Current status**, feature list, development instructions, verification commands, and scope notes to reflect the newly shipped behavior. Keep future or unimplemented capabilities clearly marked as planned rather than describing them as available.
+
+Milestone branch history:
+
+```text
+main → milestone-0 → milestone-1 → milestone-2 → milestone-3 → main
+```
 
 ## CI
 
